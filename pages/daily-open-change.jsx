@@ -1,30 +1,14 @@
-// pages/daily-open-change.tsx
+// pages/daily-open-change.jsx
+
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 
-type TokenRow = {
-  id: string
-  name: string
-  symbol: string
-  logoUrl: string
-  priceUsd: number
-  volume24hUsd: number
-  priceChange24h: number
-  poolAddress: string
-  network: string
-}
-
-type RowWithOpen = TokenRow & {
-  dayOpen: number | null
-  lastClose: number | null
-  pctFromOpen: number | null
-}
+const fetchJson = (url) => fetch(url).then((r) => r.json())
 
 export default function DailyOpenChangePage() {
-  const [rows, setRows] = useState<RowWithOpen[]>([])
+  const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -32,56 +16,67 @@ export default function DailyOpenChangePage() {
         setLoading(true)
         setError(null)
 
-        // Ana token listesini çekiyoruz (FDV, price, 24h %, volume vs)
-        const tokenRes = await fetch('/api/tokens')
-        const tokenJson = await tokenRes.json()
-        const tokens: TokenRow[] = tokenJson.tokens
+        // 1) Temel token listesi
+        const base = await fetchJson('/api/tokens')
+        const tokens = base.tokens || []
 
-        // Her token için günlük candle open/close çek
-        const rowsWithOpen: RowWithOpen[] = await Promise.all(
+        // 2) Her token için /api/day-open çağır
+        const withOpen = await Promise.all(
           tokens.map(async (t) => {
             try {
-              const ohlcvRes = await fetch(
-                `/api/day-open?network=${t.network}&pool=${t.poolAddress}`
+              const res = await fetch(
+                `/api/day-open?tokenId=${t.id}`
               )
-              const ohlcvJson = await ohlcvRes.json()
+              if (!res.ok) {
+                return {
+                  ...t,
+                  dayOpen: null,
+                  lastCloseCandle: null,
+                  pctFromOpen: null,
+                }
+              }
+              const data = await res.json()
 
-              const dayOpen =
-                typeof ohlcvJson.dayOpen === 'number'
-                  ? ohlcvJson.dayOpen
-                  : null
-              const lastClose =
-                typeof ohlcvJson.lastClose === 'number'
-                  ? ohlcvJson.lastClose
-                  : null
+              const dayOpen = data.dayOpen ?? null
+              const lastCloseCandle = data.lastClose ?? null
 
-              let pctFromOpen: number | null = null
+              let pctFromOpen = null
               if (dayOpen && t.priceUsd) {
-                pctFromOpen = ((t.priceUsd - dayOpen) / dayOpen) * 100
+                pctFromOpen =
+                  ((t.priceUsd - dayOpen) / dayOpen) * 100
               }
 
               return {
                 ...t,
                 dayOpen,
-                lastClose,
-                pctFromOpen
+                lastCloseCandle,
+                pctFromOpen,
               }
-            } catch {
-              // Bir token için OHLCV patlarsa, en azından diğer kolonlar çalışsın
+            } catch (e) {
+              console.error('day-open per token error', t.id, e)
               return {
                 ...t,
                 dayOpen: null,
-                lastClose: null,
-                pctFromOpen: null
+                lastCloseCandle: null,
+                pctFromOpen: null,
               }
             }
           })
         )
 
-        setRows(rowsWithOpen)
+        // 3) % from open'e göre DESC sırala
+        withOpen.sort((a, b) => {
+          const av =
+            a.pctFromOpen != null ? a.pctFromOpen : -Infinity
+          const bv =
+            b.pctFromOpen != null ? b.pctFromOpen : -Infinity
+          return bv - av
+        })
+
+        setRows(withOpen)
       } catch (e) {
         console.error(e)
-        setError('Failed to load data')
+        setError('Failed to load daily open change data')
       } finally {
         setLoading(false)
       }
@@ -90,158 +85,137 @@ export default function DailyOpenChangePage() {
     load()
   }, [])
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim()
-    if (!q) return rows
-    return rows.filter((r) =>
-      `${r.name} ${r.symbol}`.toLowerCase().includes(q)
+  const filteredRows = useMemo(() => {
+    const s = search.toLowerCase()
+    return rows.filter(
+      (t) =>
+        t.name.toLowerCase().includes(s) ||
+        t.symbol.toLowerCase().includes(s)
     )
   }, [rows, search])
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-50">
-            Daily Open Change
-          </h1>
-          <p className="text-xs text-slate-400">
-            Based on GeckoTerminal daily candles (open vs last close)
-          </p>
-        </div>
-        <Link
-          href="/"
-          className="text-xs text-sky-400 hover:text-sky-300 hover:underline"
-        >
-          ← Back to main view
-        </Link>
-      </header>
+  if (loading) {
+    return (
+      <div className="app">
+        <div className="loading">Loading daily candles…</div>
+      </div>
+    )
+  }
 
-      <main className="px-6 py-4">
-        <div className="mb-4 max-w-md">
+  if (error) {
+    return (
+      <div className="app">
+        <div className="error">{error}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="app">
+      <div className="detail">
+        <div className="detail-header">
+          <div className="detail-title">
+            <div>
+              <h2>Daily Open Change</h2>
+              <p>
+                Based on GeckoTerminal daily candles (open vs current
+                price)
+              </p>
+            </div>
+          </div>
+          <div className="detail-price">
+            <a href="/" className="nav-link-small">
+              ← Back to main view
+            </a>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 8 }}>
           <input
-            type="text"
-            placeholder="Search by name or symbol..."
-            className="w-full rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            className="search"
+            placeholder="Search by name or symbol…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
 
-        {loading && (
-          <div className="text-sm text-slate-400">Loading daily candles…</div>
-        )}
-        {error && (
-          <div className="text-sm text-red-400 mb-2">{error}</div>
-        )}
+        <div className="table-header">
+          <span className="col-name">Token</span>
+          <span className="col-num">Day Open</span>
+          <span className="col-num">Last Close (candle)</span>
+          <span className="col-num">% from Open</span>
+          <span className="col-num">24h % (spot)</span>
+          <span className="col-num">24h Vol</span>
+        </div>
 
-        {!loading && !error && (
-          <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/80">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-900/80 text-xs text-slate-400 uppercase">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium">Token</th>
-                  <th className="px-4 py-3 text-right font-medium">
-                    Day Open
-                  </th>
-                  <th className="px-4 py-3 text-right font-medium">
-                    Last Close (candle)
-                  </th>
-                  <th className="px-4 py-3 text-right font-medium">
-                    % from Open
-                  </th>
-                  <th className="px-4 py-3 text-right font-medium">
-                    24h % (spot)
-                  </th>
-                  <th className="px-4 py-3 text-right font-medium">
-                    24h Vol
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((t) => (
-                  <tr
-                    key={t.id}
-                    className="border-t border-slate-800/60 hover:bg-slate-900/60"
-                  >
-                    <td className="px-4 py-3 flex items-center gap-2">
-                      <img
-                        src={t.logoUrl}
-                        alt={t.symbol}
-                        className="h-6 w-6 rounded-full bg-slate-900 object-cover"
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-slate-100 text-xs font-medium">
-                          {t.name}
-                        </span>
-                        <span className="text-[10px] uppercase text-slate-500">
-                          {t.symbol}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-xs">
-                      {t.dayOpen != null
-                        ? `$${t.dayOpen.toFixed(6)}`
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-xs">
-                      {t.lastClose != null
-                        ? `$${t.lastClose.toFixed(6)}`
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-xs">
-                      {t.pctFromOpen != null ? (
-                        <span
-                          className={
-                            t.pctFromOpen >= 0
-                              ? 'text-emerald-400'
-                              : 'text-rose-400'
-                          }
-                        >
-                          {t.pctFromOpen >= 0 ? '+' : ''}
-                          {t.pctFromOpen.toFixed(2)}%
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-xs">
-                      <span
-                        className={
-                          t.priceChange24h >= 0
-                            ? 'text-emerald-400'
-                            : 'text-rose-400'
-                        }
-                      >
-                        {t.priceChange24h >= 0 ? '+' : ''}
-                        {t.priceChange24h.toFixed(2)}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-xs text-slate-300">
-                      {t.volume24hUsd
-                        ? `$${t.volume24hUsd.toLocaleString('en-US', {
-                            maximumFractionDigits: 0
-                          })}`
-                        : '—'}
-                    </td>
-                  </tr>
-                ))}
-
-                {filtered.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-8 text-center text-xs text-slate-500"
-                    >
-                      No tokens match your search.
-                    </td>
-                  </tr>
+        <div className="table-body">
+          {filteredRows.map((t) => (
+            <div key={t.id} className="row">
+              <span className="col-name">
+                {t.logo && (
+                  <img
+                    src={t.logo}
+                    alt={t.symbol}
+                    className="token-logo"
+                  />
                 )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </main>
+                <span>
+                  <div className="token-name">{t.name}</div>
+                  <div className="token-symbol">{t.symbol}</div>
+                </span>
+              </span>
+
+              {/* Day Open */}
+              <span className="col-num">
+                {t.dayOpen != null
+                  ? `$${t.dayOpen.toFixed(6)}`
+                  : '-'}
+              </span>
+
+              {/* Last Close (candle) */}
+              <span className="col-num">
+                {t.lastCloseCandle != null
+                  ? `$${t.lastCloseCandle.toFixed(6)}`
+                  : '-'}
+              </span>
+
+              {/* % from Open */}
+              <span
+                className={
+                  'col-num ' +
+                  (t.pctFromOpen != null
+                    ? t.pctFromOpen >= 0
+                      ? 'num-green'
+                      : 'num-red'
+                    : '')
+                }
+              >
+                {t.pctFromOpen != null
+                  ? `${t.pctFromOpen.toFixed(2)}%`
+                  : '-'}
+              </span>
+
+              {/* 24h % (spot) */}
+              <span
+                className={
+                  'col-num ' +
+                  (t.priceChange24h >= 0 ? 'num-green' : 'num-red')
+                }
+              >
+                {t.priceChange24h.toFixed(2)}%
+              </span>
+
+              {/* 24h Vol */}
+              <span className="col-num">
+                $
+                {t.volume24hUsd.toLocaleString('en-US', {
+                  maximumFractionDigits: 0,
+                })}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
