@@ -1,6 +1,6 @@
 // pages/daily-open-change.jsx
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 const fetchJson = (url) => fetch(url).then((r) => r.json())
 
@@ -15,58 +15,48 @@ export default function DailyOpenChangePage() {
       try {
         setLoading(true)
 
-        // 1) Tüm tokenlerin temel metrikleri
+        // 1) Tüm tokenler
         const base = await fetchJson('/api/tokens')
         const tokens = base.tokens || []
 
-        // 2) Her token için OHLCV -> open/close/%
-        const withOhlcv = await Promise.all(
-          tokens.map(async (t) => {
-            try {
-              const resp = await fetch(`/api/ohlcv?tokenId=${t.id}`)
-              if (!resp.ok) {
-                return {
-                  ...t,
-                  todayOpen: null,
-                  todayClose: null,
-                  changeFromOpenPct: null,
-                }
-              }
-              const data = await resp.json()
-              return {
-                ...t,
-                todayOpen: data.todayOpen,
-                todayClose: data.todayClose,
-                changeFromOpenPct: data.changeFromOpenPct,
-              }
-            } catch (e) {
-              console.error('ohlcv error for', t.id, e)
-              return {
-                ...t,
-                todayOpen: null,
-                todayClose: null,
-                changeFromOpenPct: null,
-              }
-            }
-          })
-        )
+        // 2) Her token için dayOpen / lastClose / % from open
+        const withOpen = tokens.map((t) => {
+          const price = t.priceUsd
+          const pct = t.priceChange24h
+          let dayOpen = null
 
-        // 3) % from open'e göre DESC sırala
-        withOhlcv.sort((a, b) => {
+          if (price != null && pct != null) {
+            const ratio = 1 + pct / 100
+            if (ratio > 0) {
+              dayOpen = price / ratio
+            }
+          }
+
+          const todayClose = price
+          const changeFromOpenPct = pct
+
+          return {
+            ...t,
+            todayOpen: dayOpen,
+            todayClose,
+            changeFromOpenPct,
+          }
+        })
+
+        // 3) % from open DESC sırala
+        withOpen.sort((a, b) => {
           const av =
-            a.changeFromOpenPct !== null &&
-            a.changeFromOpenPct !== undefined
+            a.changeFromOpenPct != null
               ? a.changeFromOpenPct
               : -Infinity
           const bv =
-            b.changeFromOpenPct !== null &&
-            b.changeFromOpenPct !== undefined
+            b.changeFromOpenPct != null
               ? b.changeFromOpenPct
               : -Infinity
           return bv - av
         })
 
-        setRows(withOhlcv)
+        setRows(withOpen)
       } catch (e) {
         console.error(e)
         setError('Failed to load daily open change data')
@@ -111,13 +101,13 @@ export default function DailyOpenChangePage() {
             <div>
               <h2>Daily Open Change</h2>
               <p>
-                Based on GeckoTerminal daily candles (open vs current
-                close)
+                Based on 24h price change (approx. open vs current
+                price)
               </p>
             </div>
           </div>
           <div className="detail-price">
-            <a href="/" style={{ fontSize: 13, color: '#93c5fd' }}>
+            <a href="/" className="nav-link-small">
               ← Back to main view
             </a>
           </div>
@@ -132,7 +122,6 @@ export default function DailyOpenChangePage() {
           />
         </div>
 
-        {/* Aynı tablo stilini kullanıyoruz */}
         <div className="table-header">
           <span className="col-name">Token</span>
           <span className="col-num">Day Open</span>
@@ -166,7 +155,7 @@ export default function DailyOpenChangePage() {
                   : '-'}
               </span>
 
-              {/* Last Close */}
+              {/* Last Close (current price) */}
               <span className="col-num">
                 {t.todayClose != null
                   ? `$${t.todayClose.toFixed(6)}`
@@ -189,7 +178,7 @@ export default function DailyOpenChangePage() {
                   : '-'}
               </span>
 
-              {/* 24h % (şu an kullandığın spot fiyat değişimi) */}
+              {/* 24h % (spot) */}
               <span
                 className={
                   'col-num ' +
