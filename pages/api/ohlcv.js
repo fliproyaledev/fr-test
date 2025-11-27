@@ -1,8 +1,7 @@
 // pages/api/ohlcv.js
-// Get daily OHLCV data for one token (by tokenId)
-// Uses GeckoTerminal public API (no API key required)
+// Her token için günlük OHLCV verisi (GeckoTerminal) + bugünkü open/close/% değişim
 
-import { TOKEN_MAP } from '../../lib/tokens'
+import { TOKENS } from '../../lib/tokens'
 
 export default async function handler(req, res) {
   const { tokenId } = req.query
@@ -11,21 +10,26 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'tokenId is required' })
   }
 
-  const token = TOKEN_MAP[tokenId]
+  const token = TOKENS.find((t) => t.id === tokenId)
 
   if (!token) {
-    return res.status(400).json({ error: `Unknown tokenId: ${tokenId}` })
+    return res
+      .status(400)
+      .json({ error: `Unknown tokenId: ${tokenId}` })
   }
 
   const network = token.network || 'base'
-  const poolAddress = token.poolAddress
+  const poolId = token.poolId
 
-  if (!poolAddress) {
-    return res.status(400).json({ error: 'Token has no poolAddress defined' })
+  if (!poolId) {
+    return res
+      .status(400)
+      .json({ error: 'Token has no poolId defined' })
   }
 
-  // Daily candles (1D), last ~30 gün
-  const url = `https://api.geckoterminal.com/api/v2/networks/${network}/pools/${poolAddress}/ohlcv/day?aggregate=1&limit=30&currency=usd&token=base`
+  const baseUrl = 'https://api.geckoterminal.com/api/v2'
+  // Günlük mumlar (1D), son 30 gün
+  const url = `${baseUrl}/networks/${network}/pools/${poolId}/ohlcv/day?aggregate=1&limit=30&currency=usd&token=base`
 
   try {
     const resp = await fetch(url, {
@@ -33,16 +37,22 @@ export default async function handler(req, res) {
     })
 
     if (!resp.ok) {
-      console.error('OHLCV error', resp.status, await resp.text())
-      return res.status(500).json({ error: 'Failed to fetch OHLCV data' })
+      console.error(
+        'OHLCV error',
+        resp.status,
+        await resp.text().catch(() => '')
+      )
+      return res
+        .status(500)
+        .json({ error: 'Failed to fetch OHLCV data' })
     }
 
     const json = await resp.json()
     const list = json?.data?.attributes?.ohlcv_list || []
 
-    // Convert [ts, open, high, low, close, volume] -> objects
+    // [ts, open, high, low, close, volume] -> objelere çevir
     const candles = list.map(([ts, o, h, l, c, v]) => ({
-      timestamp: ts * 1000, // ms
+      timestamp: ts * 1000,
       open: o,
       high: h,
       low: l,
