@@ -11,11 +11,7 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
 
-  // OHLCV state for selected token
-  const [ohlcv, setOhlcv] = useState(null)
-  const [ohlcvLoading, setOhlcvLoading] = useState(false)
-
-  // --- Load basic token list (FDV, price, 24h%, volume, liq) ---
+  // --- Token listesi ---
   useEffect(() => {
     async function load() {
       try {
@@ -48,34 +44,22 @@ export default function Home() {
     )
   }, [tokens, search])
 
-  // --- Load OHLCV for selected token (daily candles) ---
-  useEffect(() => {
-    if (!selectedId) {
-      setOhlcv(null)
-      return
-    }
+  // --- Seçili token için "day open / last price / % from open" ---
+  const dayOpen = useMemo(() => {
+    if (!selectedToken) return null
+    const price = selectedToken.priceUsd
+    const pct = selectedToken.priceChange24h
+    if (price == null || pct == null) return null
 
-    async function loadOhlcv() {
-      try {
-        setOhlcvLoading(true)
-        const res = await fetch(`/api/ohlcv?tokenId=${selectedId}`)
-        if (!res.ok) {
-          console.error('Failed to load ohlcv', res.status)
-          setOhlcv(null)
-          return
-        }
-        const data = await res.json()
-        setOhlcv(data)
-      } catch (e) {
-        console.error('OHLCV error', e)
-        setOhlcv(null)
-      } finally {
-        setOhlcvLoading(false)
-      }
-    }
+    const ratio = 1 + pct / 100
+    if (ratio <= 0) return null
 
-    loadOhlcv()
-  }, [selectedId])
+    return price / ratio
+  }, [selectedToken])
+
+  const dayClose = selectedToken?.priceUsd ?? null
+  const changeFromOpenPct =
+    selectedToken?.priceChange24h ?? null
 
   if (loading) {
     return (
@@ -95,7 +79,7 @@ export default function Home() {
 
   return (
     <div className="app">
-      {/* LEFT: TOKENS TABLE */}
+      {/* SOL: TOKEN TABLOSU */}
       <div className="sidebar">
         <div className="sidebar-header">
           <h1>AI Tokens</h1>
@@ -183,7 +167,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* RIGHT: DETAIL + CHART */}
+      {/* SAĞ: DETAY + GRAFİK */}
       <div className="detail">
         {selectedToken ? (
           <>
@@ -197,28 +181,34 @@ export default function Home() {
                   />
                 )}
                 <div>
-                  <h2>{selectedToken.name}</h2>
+                  <div className="detail-title-mainline">
+                    <h2>{selectedToken.name}</h2>
+                    <span className="detail-inline-price">
+                      ${selectedToken.priceUsd.toFixed(6)}
+                    </span>
+                    <span
+                      className={
+                        'detail-inline-change ' +
+                        (selectedToken.priceChange24h >= 0
+                          ? 'num-green'
+                          : 'num-red')
+                      }
+                    >
+                      {selectedToken.priceChange24h.toFixed(2)}% 24h
+                    </span>
+                  </div>
                   <p>{selectedToken.symbol}</p>
                 </div>
               </div>
+
               <div className="detail-price">
-                <div className="big-price">
-                  ${selectedToken.priceUsd.toFixed(6)}
-                </div>
-                <div
-                  className={
-                    'badge ' +
-                    (selectedToken.priceChange24h >= 0
-                      ? 'badge-green'
-                      : 'badge-red')
-                  }
-                >
-                  {selectedToken.priceChange24h.toFixed(2)}% 24h
-                </div>
+                <a href="/daily-open-change" className="nav-link-small">
+                  Daily Open Change →
+                </a>
               </div>
             </div>
 
-            {/* Main stats */}
+            {/* Ana istatistikler */}
             <div className="detail-grid">
               <div className="stat-card">
                 <div className="stat-label">FDV</div>
@@ -233,9 +223,10 @@ export default function Home() {
                 <div className="stat-label">Liquidity</div>
                 <div className="stat-value">
                   $
-                  {selectedToken.liquidityUsd.toLocaleString('en-US', {
-                    maximumFractionDigits: 0,
-                  })}
+                  {selectedToken.liquidityUsd.toLocaleString(
+                    'en-US',
+                    { maximumFractionDigits: 0 }
+                  )}
                 </div>
               </div>
               <div className="stat-card">
@@ -250,25 +241,21 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Daily candle stats (from OHLCV) */}
+            {/* 24h open/close/% */}
             <div className="detail-grid" style={{ marginTop: 8 }}>
               <div className="stat-card">
-                <div className="stat-label">Day Open (candle)</div>
+                <div className="stat-label">Day Open (24h)</div>
                 <div className="stat-value">
-                  {ohlcv && ohlcv.todayOpen
-                    ? `$${ohlcv.todayOpen.toFixed(6)}`
-                    : ohlcvLoading
-                    ? 'Loading…'
+                  {dayOpen != null
+                    ? `$${dayOpen.toFixed(6)}`
                     : '-'}
                 </div>
               </div>
               <div className="stat-card">
-                <div className="stat-label">Last Close</div>
+                <div className="stat-label">Last Price</div>
                 <div className="stat-value">
-                  {ohlcv && ohlcv.todayClose
-                    ? `$${ohlcv.todayClose.toFixed(6)}`
-                    : ohlcvLoading
-                    ? 'Loading…'
+                  {dayClose != null
+                    ? `$${dayClose.toFixed(6)}`
                     : '-'}
                 </div>
               </div>
@@ -277,17 +264,15 @@ export default function Home() {
                 <div
                   className={
                     'stat-value ' +
-                    (ohlcv && ohlcv.changeFromOpenPct != null
-                      ? ohlcv.changeFromOpenPct >= 0
+                    (changeFromOpenPct != null
+                      ? changeFromOpenPct >= 0
                         ? 'num-green'
                         : 'num-red'
                       : '')
                   }
                 >
-                  {ohlcv && ohlcv.changeFromOpenPct != null
-                    ? `${ohlcv.changeFromOpenPct.toFixed(2)}%`
-                    : ohlcvLoading
-                    ? 'Loading…'
+                  {changeFromOpenPct != null
+                    ? `${changeFromOpenPct.toFixed(2)}%`
                     : '-'}
                 </div>
               </div>
