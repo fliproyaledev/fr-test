@@ -287,3 +287,28 @@ body,
   font-size: 16px;
   color: #e5e7eb;
 }
+.detail-title-mainline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.detail-inline-price {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.detail-inline-change {
+  font-size: 13px;
+}
+
+.nav-link-small {
+  font-size: 13px;
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+.nav-link-small:hover {
+  text-decoration: underline;
+}
+
