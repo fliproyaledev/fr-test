@@ -11,6 +11,11 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState(null)
   const [search, setSearch] = useState('')
 
+  // OHLCV state for selected token
+  const [ohlcv, setOhlcv] = useState(null)
+  const [ohlcvLoading, setOhlcvLoading] = useState(false)
+
+  // --- Load basic token list (FDV, price, 24h%, volume, liq) ---
   useEffect(() => {
     async function load() {
       try {
@@ -43,6 +48,35 @@ export default function Home() {
     )
   }, [tokens, search])
 
+  // --- Load OHLCV for selected token (daily candles) ---
+  useEffect(() => {
+    if (!selectedId) {
+      setOhlcv(null)
+      return
+    }
+
+    async function loadOhlcv() {
+      try {
+        setOhlcvLoading(true)
+        const res = await fetch(`/api/ohlcv?tokenId=${selectedId}`)
+        if (!res.ok) {
+          console.error('Failed to load ohlcv', res.status)
+          setOhlcv(null)
+          return
+        }
+        const data = await res.json()
+        setOhlcv(data)
+      } catch (e) {
+        console.error('OHLCV error', e)
+        setOhlcv(null)
+      } finally {
+        setOhlcvLoading(false)
+      }
+    }
+
+    loadOhlcv()
+  }, [selectedId])
+
   if (loading) {
     return (
       <div className="app">
@@ -61,7 +95,7 @@ export default function Home() {
 
   return (
     <div className="app">
-      {/* SOL: TOKEN LİSTESİ */}
+      {/* LEFT: TOKENS TABLE */}
       <div className="sidebar">
         <div className="sidebar-header">
           <h1>AI Tokens</h1>
@@ -149,7 +183,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* SAĞ: DETAY + GRAFİK */}
+      {/* RIGHT: DETAIL + CHART */}
       <div className="detail">
         {selectedToken ? (
           <>
@@ -184,6 +218,7 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Main stats */}
             <div className="detail-grid">
               <div className="stat-card">
                 <div className="stat-label">FDV</div>
@@ -211,6 +246,49 @@ export default function Home() {
                     'en-US',
                     { maximumFractionDigits: 0 }
                   )}
+                </div>
+              </div>
+            </div>
+
+            {/* Daily candle stats (from OHLCV) */}
+            <div className="detail-grid" style={{ marginTop: 8 }}>
+              <div className="stat-card">
+                <div className="stat-label">Day Open (candle)</div>
+                <div className="stat-value">
+                  {ohlcv && ohlcv.todayOpen
+                    ? `$${ohlcv.todayOpen.toFixed(6)}`
+                    : ohlcvLoading
+                    ? 'Loading…'
+                    : '-'}
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">Last Close</div>
+                <div className="stat-value">
+                  {ohlcv && ohlcv.todayClose
+                    ? `$${ohlcv.todayClose.toFixed(6)}`
+                    : ohlcvLoading
+                    ? 'Loading…'
+                    : '-'}
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">% from Open</div>
+                <div
+                  className={
+                    'stat-value ' +
+                    (ohlcv && ohlcv.changeFromOpenPct != null
+                      ? ohlcv.changeFromOpenPct >= 0
+                        ? 'num-green'
+                        : 'num-red'
+                      : '')
+                  }
+                >
+                  {ohlcv && ohlcv.changeFromOpenPct != null
+                    ? `${ohlcv.changeFromOpenPct.toFixed(2)}%`
+                    : ohlcvLoading
+                    ? 'Loading…'
+                    : '-'}
                 </div>
               </div>
             </div>
