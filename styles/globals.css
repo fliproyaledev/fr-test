@@ -61,11 +61,13 @@ body,
 }
 
 .table-header {
-  padding: 6px 4px;
+  padding: 6px 6px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #9ca3af;
+  color: #cbd5f5;
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 10px;
 }
 
 .table-body {
@@ -73,6 +75,8 @@ body,
   overflow-y: auto;
   padding-right: 4px;
 }
+
+/* Satırlar */
 
 .row {
   background: transparent;
@@ -107,6 +111,7 @@ body,
 .col-num {
   font-size: 12px;
   text-align: right;
+  color: #e5e7eb; /* daha okunur */
 }
 
 .token-logo {
@@ -118,11 +123,12 @@ body,
 
 .token-name {
   font-size: 13px;
+  color: #f9fafb; /* parlak beyaz */
 }
 
 .token-symbol {
   font-size: 11px;
-  color: #9ca3af;
+  color: #a5b4fc; /* hafif parlak mor/mavi */
 }
 
 .num-green {
