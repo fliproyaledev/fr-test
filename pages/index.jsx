@@ -1,6 +1,8 @@
 // pages/index.jsx
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+
+const fetcher = (url) => fetch(url).then((r) => r.json())
 
 export default function Home() {
   const [tokens, setTokens] = useState([])
@@ -12,11 +14,10 @@ export default function Home() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/tokens')
-        const json = await res.json()
-        setTokens(json.tokens || [])
-        if (json.tokens && json.tokens.length > 0) {
-          setSelectedId(json.tokens[0].id)
+        const data = await fetcher('/api/tokens')
+        setTokens(data.tokens || [])
+        if (data.tokens && data.tokens.length > 0) {
+          setSelectedId(data.tokens[0].id)
         }
       } catch (e) {
         console.error(e)
@@ -60,7 +61,7 @@ export default function Home() {
 
   return (
     <div className="app">
-      {/* Sol taraf: liste */}
+      {/* SOL: TOKEN LİSTESİ */}
       <div className="sidebar">
         <div className="sidebar-header">
           <h1>AI Tokens</h1>
@@ -104,12 +105,21 @@ export default function Home() {
                   <div className="token-symbol">{t.symbol}</div>
                 </span>
               </span>
+
+              {/* FDV */}
               <span className="col-num">
-                ${t.fdvUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                $
+                {t.fdvUsd.toLocaleString('en-US', {
+                  maximumFractionDigits: 0,
+                })}
               </span>
+
+              {/* PRICE */}
               <span className="col-num">
                 ${t.priceUsd.toFixed(6)}
               </span>
+
+              {/* 24h % */}
               <span
                 className={
                   'col-num ' +
@@ -118,13 +128,19 @@ export default function Home() {
               >
                 {t.priceChange24h.toFixed(2)}%
               </span>
+
+              {/* 24h VOL */}
               <span className="col-num">
-                ${t.volume24hUsd.toLocaleString(undefined, {
+                $
+                {t.volume24hUsd.toLocaleString('en-US', {
                   maximumFractionDigits: 0,
                 })}
               </span>
+
+              {/* LIQ */}
               <span className="col-num">
-                ${t.liquidityUsd.toLocaleString(undefined, {
+                $
+                {t.liquidityUsd.toLocaleString('en-US', {
                   maximumFractionDigits: 0,
                 })}
               </span>
@@ -133,7 +149,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Sağ taraf: detay kart + grafik */}
+      {/* SAĞ: DETAY + GRAFİK */}
       <div className="detail">
         {selectedToken ? (
           <>
@@ -163,8 +179,7 @@ export default function Home() {
                       : 'badge-red')
                   }
                 >
-                  {selectedToken.priceChange24h.toFixed(2)}%
-                  {' '}24h
+                  {selectedToken.priceChange24h.toFixed(2)}% 24h
                 </div>
               </div>
             </div>
@@ -173,33 +188,34 @@ export default function Home() {
               <div className="stat-card">
                 <div className="stat-label">FDV</div>
                 <div className="stat-value">
-                  ${selectedToken.fdvUsd.toLocaleString()}
+                  $
+                  {selectedToken.fdvUsd.toLocaleString('en-US', {
+                    maximumFractionDigits: 0,
+                  })}
                 </div>
               </div>
               <div className="stat-card">
                 <div className="stat-label">Liquidity</div>
                 <div className="stat-value">
-                  ${selectedToken.liquidityUsd.toLocaleString()}
+                  $
+                  {selectedToken.liquidityUsd.toLocaleString('en-US', {
+                    maximumFractionDigits: 0,
+                  })}
                 </div>
               </div>
               <div className="stat-card">
                 <div className="stat-label">24h Volume</div>
                 <div className="stat-value">
-                  ${selectedToken.volume24hUsd.toLocaleString()}
+                  $
+                  {selectedToken.volume24hUsd.toLocaleString(
+                    'en-US',
+                    { maximumFractionDigits: 0 }
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="links-row">
-              {selectedToken.virtualUrl && (
-                <a
-                  href={selectedToken.virtualUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open in Virtual
-                </a>
-              )}
               <a
                 href={selectedToken.geckoTerminalUrl}
                 target="_blank"
@@ -209,7 +225,6 @@ export default function Home() {
               </a>
             </div>
 
-            {/* GeckoTerminal grafiğini embed */}
             <div className="chart-wrapper">
               <iframe
                 src={`${selectedToken.geckoTerminalUrl}?embed=1&theme=dark`}
@@ -220,9 +235,7 @@ export default function Home() {
               />
             </div>
 
-            <div className="powered">
-              Powered by GeckoTerminal
-            </div>
+            <div className="powered">Powered by GeckoTerminal</div>
           </>
         ) : (
           <div className="placeholder">Select a token from the list</div>
