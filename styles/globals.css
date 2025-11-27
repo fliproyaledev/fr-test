@@ -1,12 +1,11 @@
-/* styles/globals.css */
-
 html,
 body,
 #__next {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter',
+    sans-serif;
   background: #050816;
   color: #f5f5f5;
 }
@@ -134,7 +133,7 @@ body,
   color: #ef4444;
 }
 
-/* Sağ taraf */
+/* Sağ panel */
 
 .detail {
   flex: 1;
