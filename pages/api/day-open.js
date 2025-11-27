@@ -1,60 +1,77 @@
-// pages/api/day-open.ts
-import type { NextApiRequest, NextApiResponse } from 'next'
+// pages/api/day-open.js
+// Her token için son günlük candle'ın open & close değerini döner.
+// lib/tokens içindeki TOKENS listesini kullanır.
 
-const CG_BASE = 'https://api.coingecko.com/api/v3/onchain'
+import { TOKENS } from '../../lib/tokens'
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  const { network = 'base', pool } = req.query
+export default async function handler(req, res) {
+  const { tokenId } = req.query
 
-  if (!pool || typeof pool !== 'string') {
-    return res.status(400).json({ error: 'Missing pool param' })
+  if (!tokenId) {
+    return res.status(400).json({ error: 'tokenId is required' })
   }
 
-  try {
-    const url = `${CG_BASE}/networks/${network}/pools/${pool}/ohlcv/day` +
-      `?aggregate=1&limit=5&currency=usd&token=base`
+  const token = TOKENS.find((t) => t.id === tokenId)
 
-    const cgRes = await fetch(url, {
-      headers: {
-        'accept': 'application/json',
-        'x-cg-pro-api-key': process.env.COINGECKO_API_KEY || ''
-      }
+  if (!token) {
+    return res
+      .status(400)
+      .json({ error: `Unknown tokenId: ${tokenId}` })
+  }
+
+  const network = token.network || 'base'
+  const poolId = token.poolId
+
+  if (!poolId) {
+    return res
+      .status(400)
+      .json({ error: 'Token has no poolId defined' })
+  }
+
+  // GeckoTerminal OHLCV endpoint (günlük mumlar)
+  const baseUrl = 'https://api.geckoterminal.com/api/v2'
+  const url = `${baseUrl}/networks/${network}/pools/${poolId}/ohlcv/day?aggregate=1&limit=10&currency=usd&token=base`
+
+  try {
+    const resp = await fetch(url, {
+      headers: { Accept: 'application/json' },
     })
 
-    if (!cgRes.ok) {
-      const text = await cgRes.text()
-      console.error('CG OHLCV error', cgRes.status, text)
-      return res.status(500).json({ error: 'Failed to fetch OHLCV' })
+    if (!resp.ok) {
+      console.error(
+        'day-open error',
+        resp.status,
+        await resp.text().catch(() => '')
+      )
+      return res
+        .status(500)
+        .json({ error: 'Failed to fetch OHLCV data' })
     }
 
-    const data = await cgRes.json()
+    const json = await resp.json()
+    const list = json?.data?.attributes?.ohlcv_list || []
 
-    const list = data?.data?.attributes?.ohlcv_list as
-      | [number, string, string, string, string, string][]
-      | undefined
-
-    if (!list || !list.length) {
+    if (!Array.isArray(list) || list.length === 0) {
       return res.status(200).json({
         timestamp: null,
         dayOpen: null,
-        lastClose: null
+        lastClose: null,
       })
     }
 
-    // 🔥 ÖNEMLİ: En sondaki eleman EN YENİ günlük mum
+    // 🔥 ÖNEMLİ: GeckoTerminal'de en sondaki eleman EN YENİ günlük mum
     const last = list[list.length - 1]
-    const [timestamp, open, , , close] = last
+    // [timestamp, open, high, low, close, volume]
+    const [ts, open, , , close] = last
 
     return res.status(200).json({
-      timestamp,
-      dayOpen: parseFloat(open),
-      lastClose: parseFloat(close)
+      timestamp: ts * 1000,
+      dayOpen: typeof open === 'number' ? open : parseFloat(open),
+      lastClose:
+        typeof close === 'number' ? close : parseFloat(close),
     })
   } catch (err) {
-    console.error('day-open handler error', err)
-    return res.status(500).json({ error: 'Unexpected error' })
+    console.error('day-open handler exception:', err)
+    return res.status(500).json({ error: 'Internal error' })
   }
 }
